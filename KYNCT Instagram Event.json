@@ -1,17 +1,108 @@
 {
-  "name": "KYNCT_Instagram_Event",
+  "name": "KYNCT Instagram Event",
   "nodes": [
     {
       "parameters": {
-        "jsCode": "// Get all event candidates from the AI parsing node\nconst allEvents = $('Parse AI Response Node1')\n  .all()\n  .map(item => item.json)\n  .filter(event => event.is_event === true);\n\n// Get the events that passed the duplicate filter\nconst newEvents = $('Filter New Instagram Events')\n  .all()\n  .map(item => item.json)\n  .filter(event => event.is_event === true);\n\n// Calculate counts\nconst totalEvents = allEvents.length;\nconst newEventCount = newEvents.length;\nconst duplicatesSkipped = totalEvents - newEventCount;\n\n// Return a friendly status\nreturn [\n  {\n    json: {\n      status: 'SUCCESS',\n      total_event_candidates: totalEvents,\n      new_events: newEventCount,\n      duplicates_skipped: duplicatesSkipped,\n      document_created: true,\n      message: `Import completed successfully. ${newEventCount} new event(s) added and ${duplicatesSkipped} duplicate(s) skipped.`\n    }\n  }\n];"
+        "method": "POST",
+        "url": "https://docs.googleapis.com/v1/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"title\": \"{{$json.doc_title}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        16
+      ],
+      "id": "f776b050-0b85-4c16-b9db-50cd5690b114",
+      "name": "Create New Google Doc",
+      "retryOnFail": true,
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "gb6MptRtCBdtmfcH",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{$json.documentId}}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  requests: $('Prepare Google Doc Content & Images').item.json.image_requests\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2688,
+        16
+      ],
+      "id": "2c7ec7b2-72a9-40fa-8ee9-c89f9cd75431",
+      "name": "Insert Cover Image",
+      "retryOnFail": true,
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "gb6MptRtCBdtmfcH",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 6
+            }
+          ]
+        },
+        "feedUrl": "https://rss.app/feeds/ZfSfFovRlV5CJxr8.xml"
+      },
+      "id": "95eba5af-f31b-4825-b036-9f7c1842556b",
+      "name": "RSS Trigger Node",
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        224,
+        112
+      ],
+      "retryOnFail": true,
+      "notes": "Feed URL comes from client/founder (RSS.app account owned by them). Paste it here."
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiItems = $input.all();\nconst originalItems = $items(\"Extract Instagram Post Data\");\n\nreturn aiItems.map((item, i) => {\n\n  const aiText =\n    item.json?.content?.parts?.[0]?.text ||\n    \"{}\";\n\n  const clean = aiText\n    .replace(/^```json\\s*/i, \"\")\n    .replace(/^```\\s*/i, \"\")\n    .replace(/\\s*```$/i, \"\")\n    .trim();\n\n  let parsed;\n\n  try {\n    parsed = JSON.parse(clean);\n  } catch (e) {\n    parsed = {\n      is_event: null,\n      parse_error: true,\n      parse_error_message: e.message,\n      raw_ai_response: aiText\n    };\n  }\n\n  const orig = originalItems[i]?.json || {};\n\n  return {\n    json: {\n      // ...orig,\n      ...parsed\n\n      // Keep original Instagram data\n      // instagram_link:\n      //   parsed.instagram_link ||\n      //   orig.permalink ||\n      //   null,\n\n      // cover_image_url:\n      //   // parsed.cover_image_url ||\n      //   // orig.image_url ||\n        // null\n    }\n  };\n});"
+      },
+      "id": "8a39b285-52db-4f9f-96a9-a8a04b6a28f8",
+      "name": "Parse AI Response Node",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        112
+      ],
+      "notes": "Strips markdown fences and parses the model's JSON. Falls back to is_event:false if parsing fails."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all event candidates from the AI parsing node\nconst allEvents = $('Parse AI Response Node')\n  .all()\n  .map(item => item.json)\n  .filter(event => event.is_event === true);\n\n// Get the events that passed the duplicate filter\nconst newEvents = $('Filter New Instagram Events')\n  .all()\n  .map(item => item.json)\n  .filter(event => event.is_event === true);\n\n// Calculate counts\nconst totalEvents = allEvents.length;\nconst newEventCount = newEvents.length;\nconst duplicatesSkipped = totalEvents - newEventCount;\n\n// Return a friendly status\nreturn [\n  {\n    json: {\n      status: 'SUCCESS',\n      total_event_candidates: totalEvents,\n      new_events: newEventCount,\n      duplicates_skipped: duplicatesSkipped,\n      document_created: true,\n      message: `Import completed successfully. ${newEventCount} new event(s) added and ${duplicatesSkipped} duplicate(s) skipped.`\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -16,
-        -2144
+        2912,
+        16
       ],
-      "id": "a60b8595-f4ee-45bd-b387-9d3856218d19",
+      "id": "2b8c9b64-0267-467b-bf99-4062db1c6c66",
       "name": "Import Completion Status"
     },
     {
@@ -28,112 +119,43 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -480,
-        -2144
+        2464,
+        16
       ],
-      "id": "2567d60b-8594-4517-9945-8d23c01a18ea",
+      "id": "652cbfe2-abf2-44b9-ad58-056e15076d4b",
       "name": "Write Event Content to Google Doc",
       "retryOnFail": true,
       "credentials": {
         "googleOAuth2Api": {
-          "id": "3P8wigvTEFhHlKFE",
+          "id": "gb6MptRtCBdtmfcH",
           "name": "Google account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Get all event data from the AI parsing node\nconst events = $('Parse AI Response Node1')\n  .all()\n  .map(item => item.json)\n  .filter(event => event.is_event === true);\n\nif (events.length === 0) {\n  return [];\n}\n\nconst now = new Date();\n\nconst date = now.toLocaleDateString('en-GB', {\n  day: '2-digit',\n  month: '2-digit',\n  year: 'numeric'\n});\n\nconst time = now.toLocaleTimeString('en-GB', {\n  hour: '2-digit',\n  minute: '2-digit'\n});\n\nconst docTitle = `KYNCT Event Import - ${date} ${time}`;\n\nfunction value(v, fallback = 'Not specified') {\n  if (v === null || v === undefined || v === '') {\n    return fallback;\n  }\n\n  return String(v);\n}\n\nfunction formatDateTime(event) {\n  let result = value(event.start_date);\n\n  if (event.start_time) {\n    result += ` at ${event.start_time}`;\n  }\n\n  if (event.end_time) {\n    const endDate = event.end_date || event.start_date;\n    result += ` - ${value(endDate)} at ${event.end_time}`;\n  }\n\n  return result;\n}\n\n// Create event sections\nconst eventSections = events.map((event, index) => {\n\n  const confidenceFlags =\n    Array.isArray(event.confidence_flags)\n      ? event.confidence_flags\n      : [];\n\n  const confidenceText =\n    confidenceFlags.length > 0\n      ? confidenceFlags.join(', ')\n      : 'None';\n\n  return `\nEVENT ${index + 1}\n========================================\n\nCOVER IMAGE\n\nTITLE\n${value(event.title)}\n\nCATEGORY\n${value(event.category)}\n\nDATE & TIME\n${formatDateTime(event)}\n\nLOCATION NAME\n${value(event.location_name)}\n\nLOCATION ADDRESS\n${value(event.location_address)}\n\nDESCRIPTION\n${value(event.description)}\n\nSOCIAL IMPACT\nLevel: ${value(event.social_impact?.level, 'Unknown')}\nReason: ${value(event.social_impact?.reason, 'Not specified')}\n\nTICKET LINK\n${value(event.ticket_link)}\n\nSOURCE URL\n${value(event.source_url)}\n\nSOURCE ID\n${value(event.source_id)}\n\nCONFIDENCE FLAGS\n${confidenceText}\n\nMAX ATTENDEES\n${value(event.max_attendees)}\n\nSAFETY POLICY FLAGS\n${\n  Array.isArray(event.safety_policy_flags)\n    ? (\n        event.safety_policy_flags.length > 0\n          ? event.safety_policy_flags.join(', ')\n          : 'None'\n      )\n    : 'None'\n}\n\nSAFETY RISK LEVEL\n${value(event.safety_risk_level)}\n\nSAFETY REVIEW REASON\n${value(event.safety_review_reason)}\n\n\n`;\n}).join('\\n');\n\nconst docBody = `\nKYNCT — INSTAGRAM EVENT IMPORT\n========================================\n\nImport Date: ${date}\nImport Time: ${time}\nTotal Events: ${events.length}\n\nThese events were automatically extracted from\nInstagram posts and are ready for human review.\n\n${eventSections}\n\n========================================\nEND OF IMPORT\n========================================\n`;\n\n// Find the image insertion position for EVERY event\nconst imageData = events\n  .map((event, index) => {\n\n    const eventMarker = `EVENT ${index + 1}`;\n    const eventStart = docBody.indexOf(eventMarker);\n\n    if (eventStart === -1 || !event.cover_image) {\n      return null;\n    }\n\n    const coverImagePosition = docBody.indexOf(\n      'TITLE',\n      eventStart\n    );\n\n    if (coverImagePosition === -1) {\n      return null;\n    }\n\n    return {\n      url: event.cover_image,\n      index: coverImagePosition + 1\n    };\n  })\n  .filter(Boolean);\n\n// IMPORTANT:\n// Insert images from bottom to top so earlier indexes\n// do not change when later images are inserted.\nimageData.sort((a, b) => b.index - a.index);\n\n// Build Google Docs image requests\nconst imageRequests = [];\n\nfor (const image of imageData) {\n\n  imageRequests.push({\n    insertInlineImage: {\n      location: {\n        index: image.index\n      },\n      uri: image.url,\n      objectSize: {\n        width: {\n          magnitude: 220,\n          unit: 'PT'\n        }\n      }\n    }\n  });\n\n  imageRequests.push({\n    insertText: {\n      location: {\n        index: image.index + 1\n      },\n      text: '\\n'\n    }\n  });\n}\n\nreturn [\n  {\n    json: {\n      doc_title: docTitle,\n      event_count: events.length,\n      doc_body: docBody,\n      image_requests: imageRequests\n    }\n  }\n];"
+        "jsCode": "// Get all event data from the AI parsing node\nconst events = $('Parse AI Response Node')\n  .all()\n  .map(item => item.json)\n  .filter(event => event.is_event === true);\n\nif (events.length === 0) {\n  return [];\n}\n\nconst now = new Date();\n\nconst date = now.toLocaleDateString('en-GB', {\n  day: '2-digit',\n  month: '2-digit',\n  year: 'numeric'\n});\n\nconst time = now.toLocaleTimeString('en-GB', {\n  hour: '2-digit',\n  minute: '2-digit'\n});\n\nconst docTitle = `KYNCT Event Import - ${date} ${time}`;\n\nfunction value(v, fallback = 'Not specified') {\n  if (v === null || v === undefined || v === '') {\n    return fallback;\n  }\n\n  return String(v);\n}\n\nfunction formatDateTime(event) {\n  let result = value(event.start_date);\n\n  if (event.start_time) {\n    result += ` at ${event.start_time}`;\n  }\n\n  if (event.end_time) {\n    const endDate = event.end_date || event.start_date;\n    result += ` - ${value(endDate)} at ${event.end_time}`;\n  }\n\n  return result;\n}\n\n// Create event sections\nconst eventSections = events.map((event, index) => {\n\n  const confidenceFlags =\n    Array.isArray(event.confidence_flags)\n      ? event.confidence_flags\n      : [];\n\n  const confidenceText =\n    confidenceFlags.length > 0\n      ? confidenceFlags.join(', ')\n      : 'None';\n\n  return `\nEVENT ${index + 1}\n========================================\n\nCOVER IMAGE\n\nTITLE\n${value(event.title)}\n\nCATEGORY\n${value(event.category)}\n\nDATE & TIME\n${formatDateTime(event)}\n\nLOCATION NAME\n${value(event.location_name)}\n\nLOCATION ADDRESS\n${value(event.location_address)}\n\nDESCRIPTION\n${value(event.description)}\n\nSOCIAL IMPACT\nLevel: ${value(event.social_impact?.level, 'Unknown')}\nReason: ${value(event.social_impact?.reason, 'Not specified')}\n\nTICKET LINK\n${value(event.ticket_link)}\n\nSOURCE URL\n${value(event.source_url)}\n\nSOURCE ID\n${value(event.source_id)}\n\nCONFIDENCE FLAGS\n${confidenceText}\n\nMAX ATTENDEES\n${value(event.max_attendees)}\n\nSAFETY POLICY FLAGS\n${\n  Array.isArray(event.safety_policy_flags)\n    ? (\n        event.safety_policy_flags.length > 0\n          ? event.safety_policy_flags.join(', ')\n          : 'None'\n      )\n    : 'None'\n}\n\nSAFETY RISK LEVEL\n${value(event.safety_risk_level)}\n\nSAFETY REVIEW REASON\n${value(event.safety_review_reason)}\n\n\n`;\n}).join('\\n');\n\nconst docBody = `\nKYNCT — INSTAGRAM EVENT IMPORT\n========================================\n\nImport Date: ${date}\nImport Time: ${time}\nTotal Events: ${events.length}\n\nThese events were automatically extracted from\nInstagram posts and are ready for human review.\n\n${eventSections}\n\n========================================\nEND OF IMPORT\n========================================\n`;\n\n// Find the image insertion position for EVERY event\nconst imageData = events\n  .map((event, index) => {\n\n    const eventMarker = `EVENT ${index + 1}`;\n    const eventStart = docBody.indexOf(eventMarker);\n\n    if (eventStart === -1 || !event.cover_image) {\n      return null;\n    }\n\n    const coverImagePosition = docBody.indexOf(\n      'TITLE',\n      eventStart\n    );\n\n    if (coverImagePosition === -1) {\n      return null;\n    }\n\n    return {\n      url: event.cover_image,\n      index: coverImagePosition + 1\n    };\n  })\n  .filter(Boolean);\n\n// IMPORTANT:\n// Insert images from bottom to top so earlier indexes\n// do not change when later images are inserted.\nimageData.sort((a, b) => b.index - a.index);\n\n// Build Google Docs image requests\nconst imageRequests = [];\n\nfor (const image of imageData) {\n\n  imageRequests.push({\n    insertInlineImage: {\n      location: {\n        index: image.index\n      },\n      uri: image.url,\n      objectSize: {\n        width: {\n          magnitude: 220,\n          unit: 'PT'\n        }\n      }\n    }\n  });\n\n  imageRequests.push({\n    insertText: {\n      location: {\n        index: image.index + 1\n      },\n      text: '\\n'\n    }\n  });\n}\n\nreturn [\n  {\n    json: {\n      doc_title: docTitle,\n      event_count: events.length,\n      doc_body: docBody,\n      image_requests: imageRequests\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -944,
-        -2144
+        2016,
+        16
       ],
-      "id": "150fd866-329a-4a5a-912f-1f1fb7a39ba9",
+      "id": "d3752022-dba1-4276-b63b-8ca40ab07561",
       "name": "Prepare Google Doc Content & Images"
-    },
-    {
-      "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "1TdFRVhoa6N3OLGvZLA8JmJ9SKjLJCSkjSWHwg5fzup4",
-          "mode": "list",
-          "cachedResultName": "n8n-insta",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TdFRVhoa6N3OLGvZLA8JmJ9SKjLJCSkjSWHwg5fzup4/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "gid=0",
-          "mode": "list",
-          "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E/edit#gid=0"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "source_url": "={{ $json.source_url }}",
-            "source_id": "={{ $json.source_id }}"
-          },
-          "matchingColumns": [
-            "permalink"
-          ],
-          "schema": [
-            {
-              "id": "source_url",
-              "displayName": "source_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "source_id",
-              "displayName": "source_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [
-        -1168,
-        -2144
-      ],
-      "id": "d07f37a8-01fd-4ec0-9057-70afbce73111",
-      "name": "Save Event Permalink",
-      "retryOnFail": true,
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "YH0tE93vO6bOVnDk",
-          "name": "Google Sheets account"
-        }
-      }
     },
     {
       "parameters": {
         "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const json = item.json;\n\n  // Existing content extraction\n  const content =\n    json.content ||\n    json['content:encoded'] ||\n    json.description ||\n    '';\n\n  // Existing: extract image URL from RSS HTML\n  const imgMatch = content.match(/<img[^>]+src=[\"']([^\"']+)[\"']/i);\n\n  // New: support RSS enclosure / media image URLs\n  const imageUrl =\n    (imgMatch && imgMatch[1]) ||\n    json.enclosure?.url ||\n    json['media:content']?.url ||\n    json.media?.content?.url ||\n    json['media:thumbnail']?.url ||\n    json.media?.thumbnail?.url ||\n    null;\n\n  // Caption extraction\n  const caption =\n    json.contentSnippet ||\n    json.content ||\n    json['content:encoded'] ||\n    json.description ||\n    '';\n\n  return {\n    json: {\n      caption: caption,\n\n      image_url: imageUrl,\n\n      permalink:\n        json.link ||\n        null,\n\n      timestamp:\n        json.isoDate ||\n        json.pubDate ||\n        null,\n\n      source: 'instagram'\n    }\n  };\n});"
       },
-      "id": "fdc09238-57a2-4d61-a4f3-7ab737c1beba",
+      "id": "74bff45a-1ab1-4ba1-8595-e364a1e4d570",
       "name": "Extract Instagram Post Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2640,
-        -2064
+        448,
+        112
       ],
       "notes": "RSS.app returns caption/date directly but image URL is buried inside HTML in 'content' - regex pulls it out."
     },
@@ -154,15 +176,15 @@
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "typeVersion": 1,
       "position": [
-        -2384,
-        -2064
+        672,
+        112
       ],
-      "id": "8c99dc1f-2a36-419b-8f6e-391368570b48",
+      "id": "89ac913f-9e54-40d5-90a2-5fd69221019d",
       "name": "AI Event & Image Analysis",
       "retryOnFail": true,
       "credentials": {
         "googlePalmApi": {
-          "id": "x2guYH9IlEs46JVL",
+          "id": "thtQYMyn7kuaGBuC",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -174,44 +196,44 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1408,
-        -2144
+        1568,
+        16
       ],
-      "id": "6fd07d56-e28e-446e-9fbc-6bd3c59af752",
+      "id": "98627943-d0f5-4af9-b2b1-c44b279e85af",
       "name": "Filter New Instagram Events"
     },
     {
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1TdFRVhoa6N3OLGvZLA8JmJ9SKjLJCSkjSWHwg5fzup4",
+          "value": "1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E",
           "mode": "list",
-          "cachedResultName": "n8n-insta",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TdFRVhoa6N3OLGvZLA8JmJ9SKjLJCSkjSWHwg5fzup4/edit?usp=drivesdk"
+          "cachedResultName": "n8n_Instagram_Event",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
-          "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TdFRVhoa6N3OLGvZLA8JmJ9SKjLJCSkjSWHwg5fzup4/edit#gid=0"
+          "cachedResultName": "source url & id",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E/edit#gid=0"
         },
         "options": {}
       },
-      "id": "c0b6b566-bb9c-44e6-a6a1-db81a3a23d6b",
+      "id": "9b41ef02-ad59-46c9-88e0-fef8217fcca6",
       "name": "Check Duplicate",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        -1648,
-        -2144
+        1344,
+        16
       ],
       "alwaysOutputData": true,
       "retryOnFail": true,
       "executeOnce": true,
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "YH0tE93vO6bOVnDk",
+          "id": "Ms6RlxXctodUM4OV",
           "name": "Google Sheets account"
         }
       },
@@ -219,13 +241,13 @@
     },
     {
       "parameters": {},
-      "id": "46f23f0b-0279-4c0b-a992-f1c985e947ea",
+      "id": "fcdcf91e-8da1-4476-9c5b-9a3c006c29e1",
       "name": "Not An Event (Discard)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        -1632,
-        -1968
+        1344,
+        208
       ],
       "notes": "Dead-end for non-event posts. Nothing written anywhere for these."
     },
@@ -263,115 +285,137 @@
         },
         "options": {}
       },
-      "id": "367435ca-02ad-42c5-8287-b44f0823ac3f",
+      "id": "5b1f3300-4a5b-4fd6-9e3c-07ed7a714d0d",
       "name": "IF - Is Event?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1920,
-        -2064
+        1120,
+        112
       ],
       "notes": "True branch -> dedupe/output. False branch -> discard (No Operation)."
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://docs.googleapis.com/v1/documents",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleOAuth2Api",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"title\": \"{{$json.doc_title}}\"\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -720,
-        -2144
-      ],
-      "id": "0b08c2b7-624a-4845-ab11-8bcd76306ff8",
-      "name": "Create New Google Doc1",
-      "retryOnFail": true,
-      "credentials": {
-        "googleOAuth2Api": {
-          "id": "3P8wigvTEFhHlKFE",
-          "name": "Google account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://docs.googleapis.com/v1/documents/{{$json.documentId}}:batchUpdate",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleOAuth2Api",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ {\n  requests: $('Prepare Google Doc Content & Images').item.json.image_requests\n} }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -272,
-        -2144
-      ],
-      "id": "5bc80e63-3ded-4352-a488-18b063b0826f",
-      "name": "Insert Cover Image1",
-      "retryOnFail": true,
-      "credentials": {
-        "googleOAuth2Api": {
-          "id": "3P8wigvTEFhHlKFE",
-          "name": "Google account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyX",
-              "value": 6
-            }
-          ]
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E",
+          "mode": "list",
+          "cachedResultName": "n8n_Instagram_Event",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E/edit?usp=drivesdk"
         },
-        "feedUrl": "https://rss.app/feeds/ZfSfFovRlV5CJxr8.xml"
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "save a source url & id",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1BPICpAioKioHAo83eH_V0M1EmJ819bSY1rOmhtOfY0E/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source_id": "={{ $json.source_id }}",
+            "source_url": "={{ $json.source_url }}"
+          },
+          "matchingColumns": [
+            "permalink"
+          ],
+          "schema": [
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_id",
+              "displayName": "source_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
       },
-      "id": "0a1d83ae-9002-4929-936a-9ebd3c76e04d",
-      "name": "RSS Trigger Node1",
-      "type": "n8n-nodes-base.rssFeedReadTrigger",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
       "position": [
-        -2880,
-        -2064
+        1792,
+        16
       ],
+      "id": "bfcfa3c9-1ec2-47f0-b373-e2a4eeb0a317",
+      "name": "Save Event",
       "retryOnFail": true,
-      "notes": "Feed URL comes from client/founder (RSS.app account owned by them). Paste it here."
-    },
-    {
-      "parameters": {
-        "jsCode": "const aiItems = $input.all();\nconst originalItems = $items(\"Extract Instagram Post Data\");\n\nreturn aiItems.map((item, i) => {\n\n  const aiText =\n    item.json?.content?.parts?.[0]?.text ||\n    \"{}\";\n\n  const clean = aiText\n    .replace(/^```json\\s*/i, \"\")\n    .replace(/^```\\s*/i, \"\")\n    .replace(/\\s*```$/i, \"\")\n    .trim();\n\n  let parsed;\n\n  try {\n    parsed = JSON.parse(clean);\n  } catch (e) {\n    parsed = {\n      is_event: null,\n      parse_error: true,\n      parse_error_message: e.message,\n      raw_ai_response: aiText\n    };\n  }\n\n  const orig = originalItems[i]?.json || {};\n\n  return {\n    json: {\n      // ...orig,\n      ...parsed\n\n      // Keep original Instagram data\n      // instagram_link:\n      //   parsed.instagram_link ||\n      //   orig.permalink ||\n      //   null,\n\n      // cover_image_url:\n      //   // parsed.cover_image_url ||\n      //   // orig.image_url ||\n        // null\n    }\n  };\n});"
-      },
-      "id": "ad90f4b7-be90-4847-8d62-073ce8dd647a",
-      "name": "Parse AI Response Node1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -2176,
-        -2064
-      ],
-      "notes": "Strips markdown fences and parses the model's JSON. Falls back to is_event:false if parsing fails."
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Ms6RlxXctodUM4OV",
+          "name": "Google Sheets account"
+        }
+      }
     }
   ],
   "pinData": {},
   "connections": {
+    "Insert Cover Image": {
+      "main": [
+        [
+          {
+            "node": "Import Completion Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Trigger Node": {
+      "main": [
+        [
+          {
+            "node": "Extract Instagram Post Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response Node": {
+      "main": [
+        [
+          {
+            "node": "IF - Is Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Write Event Content to Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Write Event Content to Google Doc": {
       "main": [
         [
           {
-            "node": "Insert Cover Image1",
+            "node": "Insert Cover Image",
             "type": "main",
             "index": 0
           }
@@ -382,18 +426,7 @@
       "main": [
         [
           {
-            "node": "Create New Google Doc1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Save Event Permalink": {
-      "main": [
-        [
-          {
-            "node": "Prepare Google Doc Content & Images",
+            "node": "Create New Google Doc",
             "type": "main",
             "index": 0
           }
@@ -415,7 +448,7 @@
       "main": [
         [
           {
-            "node": "Parse AI Response Node1",
+            "node": "Parse AI Response Node",
             "type": "main",
             "index": 0
           }
@@ -426,7 +459,7 @@
       "main": [
         [
           {
-            "node": "Save Event Permalink",
+            "node": "Save Event",
             "type": "main",
             "index": 0
           }
@@ -462,44 +495,11 @@
         ]
       ]
     },
-    "Create New Google Doc1": {
+    "Save Event": {
       "main": [
         [
           {
-            "node": "Write Event Content to Google Doc",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Insert Cover Image1": {
-      "main": [
-        [
-          {
-            "node": "Import Completion Status",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "RSS Trigger Node1": {
-      "main": [
-        [
-          {
-            "node": "Extract Instagram Post Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse AI Response Node1": {
-      "main": [
-        [
-          {
-            "node": "IF - Is Event?",
+            "node": "Prepare Google Doc Content & Images",
             "type": "main",
             "index": 0
           }
@@ -507,17 +507,15 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate"
+    "executionOrder": "v1"
   },
-  "versionId": "6bd4fa2b-bc31-4be5-b14a-4e541123dd18",
+  "versionId": "82080d63-9e92-4995-b21c-e0d1ea4985ce",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "4d8f7ad875a38bca2656d7ee1b2099b62eea8c37b6d3dff2096a54d0a41dd87c"
+    "instanceId": "84f6282d9631ef482777ce0f932e4d0cafc78285395d47f318a6a713fd2ac820"
   },
-  "nodeGroups": [],
-  "id": "I9wgkgsmPwtbVhaF",
+  "id": "jnCro3jcm0Ea2aAY",
   "tags": []
 }
