@@ -1,0 +1,587 @@
+{
+  "name": "KYNCT - Ticketmaster Events",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "dd41b4e5-da9b-4be6-8e50-cc92aa993ff0",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a2",
+              "name": "city",
+              "value": "Rotterdam",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "countryCode",
+              "value": "NL",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "pageSize",
+              "value": 100,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1368270-f64c-4bef-9310-eda231e274bc",
+      "name": "Ticketmaster Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItems = $input.all();\n\nconst results = [];\n\nfor (const item of inputItems) {\n  const events = item.json?._embedded?.events ?? [];\n\n  for (const event of events) {\n    const images = Array.isArray(event.images) ? event.images : [];\n\n    // Prefer non-fallback, highest resolution image\n    const validImages = images\n      .filter(img => img?.url && img?.fallback !== true)\n      .sort((a, b) => {\n        const aPixels = (a.width || 0) * (a.height || 0);\n        const bPixels = (b.width || 0) * (b.height || 0);\n        return bPixels - aPixels;\n      });\n\n    const bestImage = validImages[0]?.url || null;\n\n    const venue = event?._embedded?.venues?.[0];\n\n    results.push({\n      json: {\n        source: \"ticketmaster\",\n        source_event_id: event.id || null,\n\n        event_name: event.name || null,\n\n        // Start date/time\n        event_date: event?.dates?.start?.localDate || null,\n        event_time: event?.dates?.start?.localTime || null,\n\n        // End date\n        end_date: event?.dates?.end?.localDate || \"null\",\n\n        // Timezone\n        timezone: event?.dates?.timezone || null,\n\n        // Venue\n        venue_name: venue?.name || null,\n\n        // Venue coordinates\n        venue_latitude: venue?.location?.latitude\n          ? Number(venue.location.latitude)\n          : null,\n\n        venue_longitude: venue?.location?.longitude\n          ? Number(venue.location.longitude)\n          : null,\n\n        description:\n          event.info ||\n          event.description ||\n          null,\n\n        ticket_link: event.url || null,\n\n        image_url: bestImage,\n\n        status: event?.dates?.status?.code || null,\n\n        ticketmaster_url: event.url || null,\n\n        raw_ticketmaster_event: event\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "5374e601-7d48-499f-a171-d856addf512f",
+      "name": "Normalize Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://app.ticketmaster.com/discovery/v2/events.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "city",
+              "value": "={{$json.city}}"
+            },
+            {
+              "name": "countryCode",
+              "value": "={{$json.countryCode}}"
+            },
+            {
+              "name": "size",
+              "value": "={{$json.pageSize}}"
+            },
+            {
+              "name": "page",
+              "value": "0"
+            },
+            {
+              "name": "sort",
+              "value": "date,asc"
+            },
+            {
+              "name": "includeTest",
+              "value": "no"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "name": "page",
+                    "value": "={{ $pageCount }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body._embedded?.events?.length }}"
+            }
+          }
+        }
+      },
+      "id": "0937a811-40fa-4378-8cb5-dc556cf4bbf9",
+      "name": "Fetch Ticketmaster",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "ZYhh0GazP4IdfW4H",
+          "name": "Query Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://docs.googleapis.com/v1/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "KYNCT Ticketmaster Events"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "5db09749-694f-4ee3-b808-16b5a8fe0c23",
+      "name": "Create Google Doc",
+      "retryOnFail": true,
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "yegJLbkl9xIcZfIx",
+          "name": "Google account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{$json.documentId}}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    requests: [\n      {\n        insertText: {\n          location: {\n            index: 1\n          },\n          text: $('Build Event Import Document').first().json.document_content\n        }\n      }\n    ]\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "ebf11c9a-2572-4f7d-a89b-72afaa790dc3",
+      "name": "Write Events to Google Doc",
+      "retryOnFail": true,
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "yegJLbkl9xIcZfIx",
+          "name": "Google account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $input.all();\n\nconst firstEvent = events[0]?.json || {};\n\nconst city = firstEvent.city || '';\nconst country = firstEvent.country || '';\n\nlet content = `KYNCT – Ticketmaster Imported Events\n====================================\n\nIMPORT SUMMARY\n--------------\n\nSource: Ticketmaster\nLocation: ${city}, ${country}\nEvents imported: ${events.length}\n\n`;\n\nevents.forEach((item, index) => {\n  const e = item.json;\n\n  content += `EVENT ${index + 1}\n--------------------\n\nEvent Name: ${e.event_name || ''}\nDate: ${e.event_date || ''}\nTime: ${e.event_time || ''}\nTimezone: ${e.timezone || ''}\nEnd Date: ${e.end_date || ''}\nVenue Name: ${e.venue || ''}\nVenue Latitude: ${e.venue_latitude ?? ''}\nVenue Longitude: ${e.venue_longitude ?? ''}\nCity: ${e.city || ''}\nCountry: ${e.country || ''}\n\nDescription:\n${e.description || ''}\n\nTicket Link:\n${e.ticket_link || ''}\n\nImage URL:\n${e.image_url || ''}\n\nSource: ${e.source || ''}\nSource Event ID: ${e.source_event_id || ''}\n\n----------------------------------------\n\n`;\n});\n\nreturn [\n  {\n    json: {\n      title: 'KYNCT – Ticketmaster Imported Events',\n      document_content: content\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "82b918e7-a574-4306-a7d3-5a4ac2e701fa",
+      "name": "Build Event Import Document"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1sDoGcUexng6wyruRhcSYvhtB_KkZe7peqZ-F6udjets",
+          "mode": "list",
+          "cachedResultName": "Ticketmaster",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sDoGcUexng6wyruRhcSYvhtB_KkZe7peqZ-F6udjets/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sDoGcUexng6wyruRhcSYvhtB_KkZe7peqZ-F6udjets/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source_event_id": "={{ $json.source_event_id }}",
+            "description": "={{ $json.description }}",
+            "event_name": "={{ $json.event_name }}",
+            "end_date": "={{ $json.end_date }}",
+            "image_url": "={{ $json.image_url }}",
+            "venue": "={{$json.venue_name}}",
+            "city": "={{$json.raw_ticketmaster_event._embedded.venues[0].city.name}}",
+            "country": "={{$json.raw_ticketmaster_event._embedded.venues[0].country.name}}",
+            "source": "={{$json.source}}",
+            "timezone": "={{ $json.timezone }}",
+            "ticket_link": "={{ $json.ticket_link }}",
+            "venue_longitude": "={{ $json.venue_longitude }}",
+            "venue_latitude": "={{ $json.venue_latitude }}",
+            "event_time": "={{ $json.event_time }}",
+            "event_date": "={{ $json.event_date }}"
+          },
+          "matchingColumns": [
+            "source_event_id"
+          ],
+          "schema": [
+            {
+              "id": "source_event_id",
+              "displayName": "source_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_name",
+              "displayName": "event_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_date",
+              "displayName": "event_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_time",
+              "displayName": "event_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "end_date",
+              "displayName": "end_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "venue",
+              "displayName": "venue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "venue_latitude",
+              "displayName": "venue_latitude",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "venue_longitude",
+              "displayName": "venue_longitude",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ticket_link",
+              "displayName": "ticket_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "4eadd318-250a-473d-90bc-8901bfa72c3a",
+      "name": "Upsert Events to Google Sheet",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "KzqRxEQ9K1tERThT",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sDoGcUexng6wyruRhcSYvhtB_KkZe7peqZ-F6udjets",
+          "mode": "list",
+          "cachedResultName": "Ticketmaster",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sDoGcUexng6wyruRhcSYvhtB_KkZe7peqZ-F6udjets/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sDoGcUexng6wyruRhcSYvhtB_KkZe7peqZ-F6udjets/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        0
+      ],
+      "id": "8289e9c4-5502-4d0c-8327-518d60b60af4",
+      "name": "Get Existing Ticketmaster Events",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "KzqRxEQ9K1tERThT",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================\n// 1. EXISTING GOOGLE SHEET EVENTS\n// =====================================================\n\nconst existingItems = $input.all();\n\n\n// =====================================================\n// 2. CURRENT TICKETMASTER EVENTS\n//    Use Limit node output, not all 319 events\n// =====================================================\n\nconst currentItems = $('Limit').all();\n\n\n// =====================================================\n// 3. EXISTING EVENTS MAP\n//    source_event_id is the ONLY matching key\n// =====================================================\n\nconst existingMap = new Map();\n\nfor (const item of existingItems) {\n\n  const existing = item.json || {};\n\n  const sourceEventId = String(\n    existing.source_event_id ?? ''\n  ).trim();\n\n  if (sourceEventId !== '') {\n    existingMap.set(sourceEventId, existing);\n  }\n}\n\n\n// =====================================================\n// 4. FIELDS TO COMPARE\n//    These match the fields stored in Google Sheet\n// =====================================================\n\nconst compareFields = [\n  'event_name',\n  'description',\n  'event_date',\n  'event_time',\n  'end_date',\n  'venue',\n  'venue_latitude',\n  'venue_longitude',\n  'city',\n  'country',\n  'ticket_link',\n  'image_url',\n  'timezone',\n  'source'\n];\n\n\n// =====================================================\n// 5. NORMALIZE VALUES\n// =====================================================\n\nfunction normalize(field, value) {\n\n  // ---------------------------------------------------\n  // null / undefined / empty / \"null\" = same\n  // ---------------------------------------------------\n\n  if (\n    value === null ||\n    value === undefined ||\n    value === '' ||\n    String(value).trim().toLowerCase() === 'null'\n  ) {\n    return '';\n  }\n\n  let v = String(value).trim();\n\n\n  // ---------------------------------------------------\n  // Normalize spaces\n  // ---------------------------------------------------\n\n  v = v.replace(/\\s+/g, ' ');\n\n\n  // ---------------------------------------------------\n  // Normalize dates\n  // ---------------------------------------------------\n\n  if (\n    field === 'event_date' ||\n    field === 'end_date'\n  ) {\n    v = v.replace('T', ' ');\n    v = v.replace(/Z$/, '');\n    v = v.trim();\n  }\n\n\n  // ---------------------------------------------------\n  // Normalize event time\n  //\n  // Examples:\n  // 09:30:00 → 09:30:00\n  // 9:30:00  → 09:30:00\n  // 09:30    → 09:30:00\n  // 9:30     → 09:30:00\n  // ---------------------------------------------------\n\n  if (field === 'event_time') {\n\n    const match = v.match(\n      /^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?$/\n    );\n\n    if (match) {\n\n      const hours = match[1].padStart(2, '0');\n      const minutes = match[2];\n      const seconds = match[3] || '00';\n\n      v = `${hours}:${minutes}:${seconds}`;\n    }\n  }\n\n\n  // ---------------------------------------------------\n  // Normalize URLs\n  // ---------------------------------------------------\n\n  if (\n    field === 'ticket_link' ||\n    field === 'image_url'\n  ) {\n    v = v.replace(/\\/$/, '');\n  }\n\n\n  // ---------------------------------------------------\n  // Normalize coordinates\n  // ---------------------------------------------------\n\n  if (\n    field === 'venue_latitude' ||\n    field === 'venue_longitude'\n  ) {\n\n    const numberValue = Number(v);\n\n    if (!Number.isNaN(numberValue)) {\n      return numberValue.toFixed(6);\n    }\n  }\n\n\n  return v;\n}\n\n\n// =====================================================\n// 6. COUNTERS\n// =====================================================\n\nlet newCount = 0;\nlet updatedCount = 0;\nlet unchangedCount = 0;\n\n\n// =====================================================\n// 7. ONLY NEW + UPDATED EVENTS ARE RETURNED\n// =====================================================\n\nconst results = [];\n\n\n// =====================================================\n// 8. COMPARE CURRENT EVENTS WITH GOOGLE SHEET\n// =====================================================\n\nfor (const item of currentItems) {\n\n  const current = item.json || {};\n\n\n  // ---------------------------------------------------\n  // Current source_event_id\n  // ---------------------------------------------------\n\n  const sourceEventId = String(\n    current.source_event_id ?? ''\n  ).trim();\n\n\n  // ---------------------------------------------------\n  // Match ONLY by source_event_id\n  // ---------------------------------------------------\n\n  const existing = existingMap.get(sourceEventId);\n\n\n  // ===================================================\n  // CASE 1: NEW EVENT\n  // ===================================================\n\n  if (!existing) {\n\n    newCount++;\n\n    results.push({\n      json: {\n        ...current,\n\n        // Get city/country from raw Ticketmaster data\n        city:\n          current.city ??\n          current.raw_ticketmaster_event?._embedded\n            ?.venues?.[0]\n            ?.city?.name ??\n          null,\n\n        country:\n          current.country ??\n          current.raw_ticketmaster_event?._embedded\n            ?.venues?.[0]\n            ?.country?.name ??\n          null,\n\n        change_type: 'new',\n\n        differences: {}\n      }\n    });\n\n    continue;\n  }\n\n\n  // ===================================================\n  // CASE 2: EXISTING EVENT\n  // ===================================================\n\n  const differences = {};\n\n\n  // ---------------------------------------------------\n  // Build current values in the SAME structure\n  // as Google Sheet\n  // ---------------------------------------------------\n\n  const currentComparable = {\n\n    event_name: current.event_name,\n\n    description: current.description,\n\n    event_date: current.event_date,\n\n    event_time: current.event_time,\n\n    end_date: current.end_date,\n\n    venue: current.venue_name,\n\n    venue_latitude: current.venue_latitude,\n\n    venue_longitude: current.venue_longitude,\n\n    city:\n      current.city ??\n      current.raw_ticketmaster_event?._embedded\n        ?.venues?.[0]\n        ?.city?.name ??\n      null,\n\n    country:\n      current.country ??\n      current.raw_ticketmaster_event?._embedded\n        ?.venues?.[0]\n        ?.country?.name ??\n      null,\n\n    ticket_link: current.ticket_link,\n\n    image_url: current.image_url,\n\n    timezone: current.timezone,\n\n    source: current.source\n  };\n\n\n  // ===================================================\n  // COMPARE EACH FIELD\n  // ===================================================\n\n  for (const field of compareFields) {\n\n    const currentValue = normalize(\n      field,\n      currentComparable[field]\n    );\n\n    const sheetValue = normalize(\n      field,\n      existing[field]\n    );\n\n\n    // -------------------------------------------------\n    // Actual change detected\n    // -------------------------------------------------\n\n    if (currentValue !== sheetValue) {\n\n      differences[field] = {\n        current: currentValue,\n        sheet: sheetValue\n      };\n    }\n  }\n\n\n  // ===================================================\n  // CASE 2A: UPDATED\n  // ===================================================\n\n  if (Object.keys(differences).length > 0) {\n\n    updatedCount++;\n\n    results.push({\n      json: {\n        ...currentComparable,\n        ...current,\n\n        // Keep correct Sheet values\n        venue:\n          current.venue_name,\n\n        city:\n          currentComparable.city,\n\n        country:\n          currentComparable.country,\n\n        change_type: 'updated',\n\n        differences\n      }\n    });\n\n  }\n\n\n  // ===================================================\n  // CASE 2B: UNCHANGED\n  // ===================================================\n  //\n  // Do NOT return unchanged events.\n  // They will stop the workflow if nothing else changed.\n  //\n\n  else {\n\n    unchangedCount++;\n  }\n}\n\n\n// =====================================================\n// 9. RETURN ONLY NEW + UPDATED EVENTS\n// =====================================================\n\nreturn results.map(item => ({\n  json: {\n\n    ...item.json,\n\n    new_count: newCount,\n\n    updated_count: updatedCount,\n\n    unchanged_count: unchangedCount,\n\n    should_create_doc:\n      newCount > 0 ||\n      updatedCount > 0\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "9dac3b8f-7607-4bf0-bff2-1b8c95a64d42",
+      "name": "Compare Ticketmaster Events"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Ticketmaster Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticketmaster Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch Ticketmaster",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Events": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Ticketmaster Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Ticketmaster": {
+      "main": [
+        [
+          {
+            "node": "Normalize Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Write Events to Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Event Import Document": {
+      "main": [
+        [
+          {
+            "node": "Create Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Events to Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Build Event Import Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Ticketmaster Events": {
+      "main": [
+        [
+          {
+            "node": "Compare Ticketmaster Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Ticketmaster Events": {
+      "main": [
+        [
+          {
+            "node": "Upsert Events to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c18e31c3-dc01-4f19-b03d-ff9be741a47e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1f1c78950f1e2c8ea4c09f4e052337fddfc96260b7aa3585cb1e9ed3718fff0c"
+  },
+  "nodeGroups": [],
+  "id": "6cijFdVBS6bwLDJq",
+  "tags": []
+}
