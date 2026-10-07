@@ -1,0 +1,672 @@
+{
+  "name": "KYNCT - Uitagenda Event",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -368,
+        -336
+      ],
+      "id": "c5e224eb-5c89-43e6-b6ac-c69fdb2ffa07",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg1",
+              "name": "agenda_url",
+              "value": "https://www.uitagendarotterdam.nl/agenda/",
+              "type": "string"
+            },
+            {
+              "id": "cfg2",
+              "name": "page_id",
+              "value": "1083",
+              "type": "string"
+            },
+            {
+              "id": "cfg3",
+              "name": "page_size",
+              "value": 11,
+              "type": "number"
+            },
+            {
+              "id": "cfg4",
+              "name": "culture",
+              "value": "nl-NL",
+              "type": "string"
+            },
+            {
+              "id": "cfg5",
+              "name": "page",
+              "value": 1,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5d11d40e-0dde-4816-aefa-ec4a889e3d66",
+      "name": "Prepare Import Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -144,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.uitagendarotterdam.nl/umbraco/api/Entity/GetProductions",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{$json.page_id}}"
+            },
+            {
+              "name": "pageSize",
+              "value": "={{$json.page_size}}"
+            },
+            {
+              "name": "isMobile",
+              "value": "false"
+            },
+            {
+              "name": "culture",
+              "value": "={{$json.culture}}"
+            },
+            {
+              "name": "p",
+              "value": "={{$json.page}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/154 Safari/537.36"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.uitagendarotterdam.nl/agenda/"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/plain, */*"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "c07696ff-a4b5-431c-9094-404352fef7a1",
+      "name": "Fetch Uitagenda Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        80,
+        -336
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const show = v =>\n  v === null || v === undefined || v === ''\n    ? 'null'\n    : v;\n\nconst response = $json;\n\nconst events =\n  response?.pagedList?.items ??\n  response?.pagedList?.Items ??\n  response?.items ??\n  response?.Items ??\n  [];\n\nreturn events.map(event => {\n\n  const firstDate = event?.dates?.[0] ?? {};\n\n  const rawTime = String(\n    firstDate.timeBeautified ||\n    event.timeBeautified ||\n    ''\n  );\n\n  const timeParts = rawTime.split(/\\s*-\\s*/);\n\n  // -----------------------------------------\n  // EVENT URL\n  // -----------------------------------------\n\n  let eventUrl = event?.url || null;\n\n  if (eventUrl) {\n\n    eventUrl = String(eventUrl).trim();\n\n    if (eventUrl.startsWith('/')) {\n      eventUrl =\n        'https://www.uitagendarotterdam.nl' +\n        eventUrl;\n    }\n\n  } else {\n\n    // Fallback: generate URL from event title\n    const slug = String(event?.title || '')\n      .toLowerCase()\n      .trim()\n      .normalize('NFD')\n      .replace(/[\\u0300-\\u036f]/g, '')\n      .replace(/[^a-z0-9]+/g, '-')\n      .replace(/^-+|-+$/g, '');\n\n    if (slug) {\n      eventUrl =\n        `https://www.uitagendarotterdam.nl/agenda/${slug}/`;\n    }\n  }\n\n  return {\n    json: {\n\n      source: 'uitagenda',\n\n      source_event_id:\n        show(event.id),\n\n      event_name:\n        show(event.title),\n\n      event_date:\n        show(event.date),\n\n      event_time:\n        show(timeParts[0]),\n\n      end_date:\n        show(event.dateEnd),\n\n      timezone:\n        'Europe/Amsterdam',\n\n      venue:\n        show(event?.location?.title),\n\n      venue_latitude:\n        show(event?.geoLocation?.latitude),\n\n      venue_longitude:\n        show(event?.geoLocation?.longitude),\n\n      city:\n        show(\n          event?.location?.city ||\n          'Rotterdam'\n        ),\n\n      country:\n        show(\n          event?.location?.country === 'NL'\n            ? 'Netherlands'\n            : event?.location?.country ||\n              'Netherlands'\n        ),\n\n      description:\n        show(\n          event.text ||\n          event.textShort\n        ),\n\n      ticket_link:\n        show(firstDate.ticketUrl),\n\n      image_url:\n        event.image\n          ? `https://www.uitagendarotterdam.nl${event.image}`\n          : 'null',\n\n      event_url:\n        eventUrl || 'null',\n\n      scrape_status:\n        'success'\n    }\n  };\n});"
+      },
+      "id": "6569e5a0-0500-4232-a16d-d06f8fbe99a0",
+      "name": "Normalize Event Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.event_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "event_page_html"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        528,
+        -336
+      ],
+      "id": "77e7639d-593c-459f-b45a-409f5178e917",
+      "name": "Fetch Event Page",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const httpItems = $input.all();\nconst originalItems = $('Normalize Event Data').all();\n\nfunction decodeHtml(str) {\n  return String(str || '')\n    .replace(/&amp;/gi, '&')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#39;/gi, \"'\")\n    .replace(/&#x27;/gi, \"'\")\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>');\n}\n\nfunction cleanUrl(url) {\n  if (!url) return null;\n\n  url = decodeHtml(url).trim();\n\n  if (!url) return null;\n\n  if (url.startsWith('//')) {\n    return 'https:' + url;\n  }\n\n  if (url.startsWith('/')) {\n    return 'https://www.uitagendarotterdam.nl' + url;\n  }\n\n  return url;\n}\n\nfunction extractTicketLink(html) {\n  if (!html) return null;\n\n  const anchorRegex =\n    /<a\\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>([\\s\\S]*?)<\\/a>/gi;\n\n  const anchors = [];\n\n  for (const match of html.matchAll(anchorRegex)) {\n    const href = cleanUrl(match[1]);\n    const innerHtml = match[2] || '';\n\n    const text = decodeHtml(\n      innerHtml\n        .replace(/<[^>]+>/g, ' ')\n        .replace(/\\s+/g, ' ')\n        .trim()\n    ).toLowerCase();\n\n    if (!href) continue;\n\n    anchors.push({\n      href,\n      text\n    });\n  }\n\n  // --------------------------------------------------\n  // 1. Strong ticket-link text match\n  // --------------------------------------------------\n\n  const strongTicketTexts = [\n    'buy tickets',\n    'buy ticket',\n    'tickets kopen',\n    'tickets bestellen',\n    'bestel tickets',\n    'koop tickets',\n    'koop ticket',\n    'kaartjes kopen',\n    'kaartjes bestellen'\n  ];\n\n  for (const anchor of anchors) {\n    if (\n      strongTicketTexts.some(keyword =>\n        anchor.text.includes(keyword)\n      )\n    ) {\n      return anchor.href;\n    }\n  }\n\n  // --------------------------------------------------\n  // 2. Generic ticket text match\n  // --------------------------------------------------\n\n  for (const anchor of anchors) {\n    if (\n      anchor.text === 'ticket' ||\n      anchor.text === 'tickets' ||\n      anchor.text.includes('ticket')\n    ) {\n      return anchor.href;\n    }\n  }\n\n  // --------------------------------------------------\n  // 3. Ticket-related URL match\n  // --------------------------------------------------\n\n  for (const anchor of anchors) {\n    const urlLower = anchor.href.toLowerCase();\n\n    if (\n      /ticket|tickets|buyticket|buy-tickets|tickets-kopen|kaartjes/.test(\n        urlLower\n      )\n    ) {\n      return anchor.href;\n    }\n  }\n\n  return null;\n}\n\n\n// --------------------------------------------------\n// Process every event\n// --------------------------------------------------\n\nreturn originalItems.map((originalItem, index) => {\n  const original = originalItem.json || {};\n  const httpItem = httpItems[index];\n\n  const html = String(\n    httpItem?.json?.event_page_html || ''\n  );\n\n  const extractedTicketLink = extractTicketLink(html);\n\n  // Keep existing API ticket link if page scraping\n  // did not find anything\n  const existingTicketLink =\n    original.ticket_link &&\n    original.ticket_link !== 'null' &&\n    original.ticket_link !== ''\n      ? original.ticket_link\n      : null;\n\n  const finalTicketLink =\n    extractedTicketLink || existingTicketLink || 'null';\n\n  return {\n    json: {\n      ...original,\n\n      ticket_link: finalTicketLink,\n\n      scrape_status: extractedTicketLink\n        ? 'success'\n        : existingTicketLink\n          ? 'success_api_ticket_link'\n          : 'success_no_ticket_link'\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -336
+      ],
+      "id": "9637677f-27c8-4792-93db-ff098be8bc92",
+      "name": "Extract Ticket Link"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1sMU9DqfM-HV80xTMvB7saJh6_D8ucRD5-rufV4ycWnQ",
+          "mode": "list",
+          "cachedResultName": " Uitagenda Events",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sMU9DqfM-HV80xTMvB7saJh6_D8ucRD5-rufV4ycWnQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sMU9DqfM-HV80xTMvB7saJh6_D8ucRD5-rufV4ycWnQ/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "event_name": "={{ $json.event_name }}",
+            "source_event_id": "={{ $json.source_event_id }}",
+            "description": "={{ $json.description }}",
+            "event_date": "={{ $json.event_date }}",
+            "event_time": "={{ $json.event_time }}",
+            "end_date": "={{ $json.end_date }}",
+            "venue": "={{ $json.venue }}",
+            "venue_latitude": "={{ $json.venue_latitude }}",
+            "venue_longitude": "={{ $json.venue_longitude }}",
+            "city": "={{ $json.city }}",
+            "country": "={{ $json.country }}",
+            "ticket_link": "={{ $json.ticket_link }}",
+            "image_url": "={{ $json.image_url }}",
+            "timezone": "={{ $json.timezone }}",
+            "source": "={{ $json.source }}",
+            "event_url": "={{ $json.event_url }}"
+          },
+          "matchingColumns": [
+            "source_event_id"
+          ],
+          "schema": [
+            {
+              "id": "source_event_id",
+              "displayName": "source_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_name",
+              "displayName": "event_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_date",
+              "displayName": "event_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_time",
+              "displayName": "event_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "end_date",
+              "displayName": "end_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "venue",
+              "displayName": "venue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "venue_latitude",
+              "displayName": "venue_latitude",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "venue_longitude",
+              "displayName": "venue_longitude",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ticket_link",
+              "displayName": "ticket_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "event_url",
+              "displayName": "event_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5d588e74-a21a-4599-ac2f-7b30b99db37f",
+      "name": "Save Events to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1424,
+        -336
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "KzqRxEQ9K1tERThT",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const show = v => (v === null || v === undefined || v === '' ? 'null' : v);\nconst events = $input.all();\n\nlet content = `KYNCT – Uitagenda Scraped Events\n================================\n\nIMPORT SUMMARY\n--------------\nSource: Uitagenda Rotterdam\nLocation: Rotterdam, Netherlands\nEvents imported: ${events.length}\n\n`;\n\nevents.forEach((i, n) => {\n  const e = i.json;\n\n  content += `EVENT ${n + 1}\n--------------------\nEvent Name: ${show(e.event_name)}\nDate: ${show(e.event_date)}\nTime: ${show(e.event_time)}\nTimezone: ${show(e.timezone)}\nEnd Date: ${show(e.end_date)}\nVenue: ${show(e.venue)}\nVenue Latitude: ${show(e.venue_latitude)}\nVenue Longitude: ${show(e.venue_longitude)}\nCity: ${show(e.city)}\nCountry: ${show(e.country)}\n\nDescription:\n${show(e.description)}\n\nTicket Link:\n${show(e.ticket_link)}\n\nImage URL:\n${show(e.image_url)}\n\nEvent URL:\n${show(e.event_url)}\n\nSource: ${show(e.source)}\nSource Event ID: ${show(e.source_event_id)}\n\n----------------------------------------\n\n`;\n});\n\nreturn [{\n  json: {\n    title: 'KYNCT – Uitagenda Scraped Events',\n    document_content: content\n  }\n}];"
+      },
+      "id": "952b062a-cfa2-4864-b5e9-17a86c43f4cb",
+      "name": "Prepare Import Document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://docs.googleapis.com/v1/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { title: $json.title } }}",
+        "options": {}
+      },
+      "id": "f0ffe22b-bf22-4ea0-b049-a9900dbe2daa",
+      "name": "Create Google Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1872,
+        -336
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "yegJLbkl9xIcZfIx",
+          "name": "Google account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{$json.documentId}}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { requests: [ { insertText: { location: { index: 1 }, text: $('Prepare Import Document').first().json.document_content } } ] } }}",
+        "options": {}
+      },
+      "id": "8ebb7f5f-1f55-4e97-86be-2cde30a81c1d",
+      "name": "Write Events to Google Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2096,
+        -336
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "yegJLbkl9xIcZfIx",
+          "name": "Google account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sMU9DqfM-HV80xTMvB7saJh6_D8ucRD5-rufV4ycWnQ",
+          "mode": "list",
+          "cachedResultName": " Uitagenda Events",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sMU9DqfM-HV80xTMvB7saJh6_D8ucRD5-rufV4ycWnQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sMU9DqfM-HV80xTMvB7saJh6_D8ucRD5-rufV4ycWnQ/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        976,
+        -336
+      ],
+      "id": "008ce741-1cf5-4c4d-b9d4-da82cdf1f6f5",
+      "name": "Get Existing Uitagenda Events",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "KzqRxEQ9K1tERThT",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingItems = $input.all();\nconst currentItems = $('Extract Ticket Link').all();\n\n\n// =====================================================\n// 1. EXISTING GOOGLE SHEET EVENTS\n//    source_event_id is the ONLY matching key\n// =====================================================\n\nconst existingMap = new Map();\n\nfor (const item of existingItems) {\n\n  const existing = item.json || {};\n\n  const sourceEventId = String(\n    existing.source_event_id ?? ''\n  ).trim();\n\n  if (sourceEventId !== '') {\n    existingMap.set(sourceEventId, existing);\n  }\n}\n\n\n// =====================================================\n// 2. FIELDS TO COMPARE\n//    Only checked AFTER source_event_id matches\n// =====================================================\n\nconst compareFields = [\n  'event_name',\n  'description',\n  'event_date',\n  'event_time',\n  'end_date',\n  'venue',\n  'venue_latitude',\n  'venue_longitude',\n  'city',\n  'country',\n  'ticket_link',\n  'image_url',\n  'timezone',\n  'source',\n  'event_url'\n];\n\n\n// =====================================================\n// 3. NORMALIZE VALUES\n// =====================================================\n\nfunction normalize(field, value) {\n\n  // Treat null / empty values as the same\n  if (\n    value === null ||\n    value === undefined ||\n    value === '' ||\n    String(value).trim().toLowerCase() === 'null'\n  ) {\n    return '';\n  }\n\n  let v = String(value).trim();\n\n\n  // ---------------------------------------------\n  // Normalize date format\n  // ---------------------------------------------\n  //\n  // 2026-10-06T10:30:00\n  // 2026-10-06 10:30:00\n  //\n  // Both become:\n  // 2026-10-06 10:30:00\n  //\n\n  if (\n    field === 'event_date' ||\n    field === 'end_date'\n  ) {\n    v = v.replace('T', ' ');\n    v = v.replace(/Z$/, '');\n    v = v.trim();\n  }\n\n\n  // ---------------------------------------------\n  // Normalize extra spaces\n  // ---------------------------------------------\n\n  v = v.replace(/\\s+/g, ' ');\n\n\n  // ---------------------------------------------\n  // Normalize URLs\n  // ---------------------------------------------\n\n  if (\n    field === 'ticket_link' ||\n    field === 'image_url' ||\n    field === 'event_url'\n  ) {\n    v = v.replace(/\\/$/, '');\n  }\n\n\n  // ---------------------------------------------\n  // Normalize coordinates\n  // ---------------------------------------------\n\n  if (\n    field === 'venue_latitude' ||\n    field === 'venue_longitude'\n  ) {\n\n    const numberValue = Number(v);\n\n    if (!Number.isNaN(numberValue)) {\n      return numberValue.toFixed(6);\n    }\n  }\n\n\n  return v;\n}\n\n\n// =====================================================\n// 4. COUNTERS\n// =====================================================\n\nlet newCount = 0;\nlet updatedCount = 0;\nlet unchangedCount = 0;\n\n\n// =====================================================\n// 5. ONLY NEW + UPDATED EVENTS WILL BE STORED\n// =====================================================\n\nconst results = [];\n\n\n// =====================================================\n// 6. COMPARE CURRENT EVENTS WITH GOOGLE SHEET\n// =====================================================\n\nfor (const item of currentItems) {\n\n  const current = item.json || {};\n\n\n  // ---------------------------------------------\n  // Current source_event_id\n  // ---------------------------------------------\n\n  const sourceEventId = String(\n    current.source_event_id ?? ''\n  ).trim();\n\n\n  // ---------------------------------------------\n  // Match ONLY by source_event_id\n  // ---------------------------------------------\n\n  const existing = existingMap.get(sourceEventId);\n\n\n  // =================================================\n  // CASE 1: NEW EVENT\n  // source_event_id does not exist in Sheet\n  // =================================================\n\n  if (!existing) {\n\n    newCount++;\n\n    results.push({\n      json: {\n        ...current,\n\n        change_type: 'new',\n\n        differences: {}\n      }\n    });\n\n    continue;\n  }\n\n\n  // =================================================\n  // CASE 2: EXISTING EVENT\n  // source_event_id matched\n  // Compare all fields\n  // =================================================\n\n  const differences = {};\n\n\n  for (const field of compareFields) {\n\n    const currentValue = normalize(\n      field,\n      current[field]\n    );\n\n    const sheetValue = normalize(\n      field,\n      existing[field]\n    );\n\n\n    // ---------------------------------------------\n    // Actual field change detected\n    // ---------------------------------------------\n\n    if (currentValue !== sheetValue) {\n\n      differences[field] = {\n        current: currentValue,\n        sheet: sheetValue\n      };\n    }\n  }\n\n\n  // =================================================\n  // CASE 2A: EVENT UPDATED\n  // =================================================\n\n  if (Object.keys(differences).length > 0) {\n\n    updatedCount++;\n\n    results.push({\n      json: {\n        ...current,\n\n        change_type: 'updated',\n\n        differences\n      }\n    });\n\n  }\n\n\n  // =================================================\n  // CASE 2B: EVENT UNCHANGED\n  // =================================================\n  //\n  // IMPORTANT:\n  // Do NOT push this event into results.\n  //\n  // Nothing will be sent to the next node.\n  //\n\n  else {\n\n    unchangedCount++;\n  }\n}\n\n\n// =====================================================\n// 7. RETURN ONLY NEW + UPDATED EVENTS\n// =====================================================\n//\n// IMPORTANT:\n// Unchanged events are NOT returned.\n//\n\nreturn results.map(item => ({\n  json: {\n\n    ...item.json,\n\n    new_count: newCount,\n\n    updated_count: updatedCount,\n\n    unchanged_count: unchangedCount,\n\n    // Google Doc should be created\n    // if at least one event is new OR updated\n    should_create_doc:\n      newCount > 0 ||\n      updatedCount > 0\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -336
+      ],
+      "id": "378fdb8f-cb0b-42cf-9360-31fb590d3e2b",
+      "name": "Compare Uitagenda Events"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Import Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Import Configuration": {
+      "main": [
+        [
+          {
+            "node": "Fetch Uitagenda Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Uitagenda Events": {
+      "main": [
+        [
+          {
+            "node": "Normalize Event Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Event Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Event Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Event Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Ticket Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Ticket Link": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Uitagenda Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Events to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Import Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Import Document": {
+      "main": [
+        [
+          {
+            "node": "Create Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Write Events to Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Uitagenda Events": {
+      "main": [
+        [
+          {
+            "node": "Compare Uitagenda Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Uitagenda Events": {
+      "main": [
+        [
+          {
+            "node": "Save Events to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d280cd8d-5f2d-4335-92f6-3a48cc4020aa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1f1c78950f1e2c8ea4c09f4e052337fddfc96260b7aa3585cb1e9ed3718fff0c"
+  },
+  "nodeGroups": [],
+  "id": "CUyrlVfbFW7DvBl8",
+  "tags": []
+}
